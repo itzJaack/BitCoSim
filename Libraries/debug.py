@@ -10,7 +10,16 @@ class ConsoleRedirector:
     def write(self, str):
         try:
             self.text_widget.configure(state="normal")
-            self.text_widget.insert("end", str)
+            
+            tag = "normal"
+            if "[ERROR]" in str or "[BANCAROTTA]" in str or "[TRIGGER]" in str:
+                tag = "error"
+            elif "[EDIT]" in str or "[WARNING]" in str:
+                tag = "warning"
+            elif "[VIEW]" in str or "[DEBUG]" in str:
+                tag = "info"
+            
+            self.text_widget.insert("end", str, tag)
             self.text_widget.see("end")
             self.text_widget.configure(state="disabled")
         except:
@@ -90,8 +99,20 @@ class DebugInterface(ctk.CTkToplevel):
         
         ctk.CTkLabel(self.right_frame, text="System Log", font=("Roboto", 16, "bold")).pack(anchor="w", pady=5)
         
-        self.console_text = ctk.CTkTextbox(self.right_frame, font=("Consolas", 12), fg_color="#1E1E1E", text_color="#00FF00")
+        self.console_text = ctk.CTkTextbox(self.right_frame, font=("Consolas", 12), fg_color="#1E1E1E", text_color="#E0E0E0")
         self.console_text.pack(fill="both", expand=True)
+        
+        # Configura tag (customtkinter usa il widget Text sottostante)
+        # Nota: CTkTextbox non espone direttamente tag_config in modo ufficiale nelle vecchie versioni, ma proviamo via _textbox
+        # Se fallisce, usiamo text_color default.
+        try:
+            self.console_text._textbox.tag_config("error", foreground="#FF5252") # Rosso
+            self.console_text._textbox.tag_config("warning", foreground="#FFA726") # Arancio
+            self.console_text._textbox.tag_config("info", foreground="#448AFF") # Blu
+            self.console_text._textbox.tag_config("normal", foreground="#E0E0E0") # Bianco/Grigio
+        except:
+            pass
+            
         self.console_text.configure(state="disabled")
 
         sys.debug = ConsoleRedirector(self.console_text)
@@ -105,18 +126,14 @@ class DebugInterface(ctk.CTkToplevel):
             self.wallet.balance = new_balance
             self.market.current_price = new_price
             
-            print(f"[EDIT] Dati aggiornati forzatamente: Saldo=${new_balance}, Prezzo=${new_price}")
+            sys.debug.write(f"[EDIT] Dati aggiornati forzatamente: Saldo=${new_balance}, Prezzo=${new_price}\n")
         except ValueError:
-            print("[ERROR] Input non numerico rilevato.")
+            sys.debug.write("[ERROR] Input non numerico rilevato.\n")
 
     def trigger_bankrupt(self):
         if self.bankrupt:
-            import time
-            self.bankrupt.in_danger = True
-            self.bankrupt.start_time = time.time()
-            self.bankrupt.grace_period = 30 
-            
-            print("[TRIGGER] Evento Bancarotta attivato manualmente!")
+            self.bankrupt.forced_danger = True
+            sys.debug.write("[TRIGGER] Evento Bancarotta attivato manualmente!\n")
 
     def refresh_view(self):
         self.entry_balance.delete(0, "end")
@@ -124,7 +141,7 @@ class DebugInterface(ctk.CTkToplevel):
         
         self.entry_price.delete(0, "end")
         self.entry_price.insert(0, str(self.market.current_price))
-        print("[VIEW] Interfaccia sincronizzata con il gioco.")
+        sys.debug.write("[VIEW] Interfaccia sincronizzata con il gioco.\n")
 
     def toggle(self, event=None):
         if self.state() == "withdraw" or self.state() == "iconic" or not self.winfo_viewable():

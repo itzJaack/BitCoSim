@@ -27,7 +27,7 @@ if %errorlevel% neq 0 (
 
 :: Installazione delle dipendenze Python necessarie
 echo %WHITE%[1/3]%RESET% Verifica installazione librerie...
-python -m pip install customtkinter pillow matplotlib >nul 2>&1
+python -m pip install customtkinter pillow matplotlib requests >nul 2>&1
 if %errorlevel% neq 0 (
     echo %YELLOW%[!] Errore durante l'installazione delle librerie.%RESET%
     echo %YELLOW%[!] Controlla la connessione internet o i permessi di sistema.%RESET%

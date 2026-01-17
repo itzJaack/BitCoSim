@@ -4,6 +4,8 @@ import customtkinter as ctk
 import os
 import tkinter as tk
 import sys
+import threading
+import requests
 
 # Aggiungi la directory corrente al path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -27,6 +29,7 @@ class BitCoSimApp(ctk.CTk):
         # --- Configurazione Finestra ---
         self.title("BitCoSim - Cryptocurrency Simulator")
         self.geometry("1100x700")
+        self.after(200, lambda: self.state("zoomed"))
         
         # Gestione chiusura window
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -42,6 +45,8 @@ class BitCoSimApp(ctk.CTk):
         self.history = History(self.wallet, self.market)
         self.bankrupt = Bankrupt(self.wallet, self.market)
         self.save_manager = SaveManager(self.market, self.wallet, self.bankrupt, self.history)
+        
+        self.current_pct_change = 0.0
 
         # --- Dati per il Grafico ---
         self.graph_data = [] 
@@ -81,8 +86,14 @@ class BitCoSimApp(ctk.CTk):
         stats_frame = ctk.CTkFrame(self.start_frame, fg_color="transparent")
         stats_frame.grid(row=3, column=0, pady=30)
         
-        ctk.CTkLabel(stats_frame, text="BTC PRICE: $42,500", font=("Consolas", 14), text_color="#4CAF50").pack(side="left", padx=15)
-        ctk.CTkLabel(stats_frame, text="MARKET CAP: $850B", font=("Consolas", 14), text_color="#2196F3").pack(side="left", padx=15)
+        self.lbl_start_price = ctk.CTkLabel(stats_frame, text="BTC PRICE: Loading...", font=("Consolas", 14), text_color="#4CAF50")
+        self.lbl_start_price.pack(side="left", padx=15)
+        
+        self.lbl_start_cap = ctk.CTkLabel(stats_frame, text="MARKET CAP: Loading...", font=("Consolas", 14), text_color="#2196F3")
+        self.lbl_start_cap.pack(side="left", padx=15)
+
+        # Avvia fetch dati in background
+        threading.Thread(target=self.fetch_live_data, daemon=True).start()
 
         btn_frame = ctk.CTkFrame(self.start_frame, fg_color="transparent")
         btn_frame.grid(row=4, column=0, pady=20)
@@ -91,6 +102,34 @@ class BitCoSimApp(ctk.CTk):
         ctk.CTkButton(btn_frame, text="CARICA PARTITA", command=self.load_and_start, width=220, height=50, font=("Roboto", 16, "bold"), fg_color="transparent", border_width=2, text_color=("gray10", "gray90")).pack(pady=10)
         
         ctk.CTkLabel(self.start_frame, text="v1.0.0 | Creato da BitCoSim Team", font=("Roboto", 10), text_color="gray50").grid(row=5, column=0, pady=20)
+
+    def fetch_live_data(self):
+        try:
+            response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_market_cap=true")
+            data = response.json()
+            
+            price = data['bitcoin']['usd']
+            cap = data['bitcoin']['usd_market_cap']
+            
+            # Format Market Cap (Billion/Trillion)
+            if cap >= 1_000_000_000_000:
+                cap_formatted = f"${cap/1_000_000_000_000:.2f}T"
+            else:
+                cap_formatted = f"${cap/1_000_000_000:.2f}B"
+                
+            # Update UI in main thread safely (using after usually preferred but ctk often handles this, 
+            # for safety we can use after or direct config if simple)
+            self.after(0, lambda: self.update_start_labels(price, cap_formatted))
+            
+        except Exception as e:
+            sys.debug.write(f"[NETWORK] Errore fetch dati: {e}\n")
+            self.after(0, lambda: self.update_start_labels(42500, "$850B")) # Fallback
+
+    def update_start_labels(self, price, cap):
+        if hasattr(self, 'lbl_start_price'):
+            self.lbl_start_price.configure(text=f"BTC PRICE: ${price:,.0f}")
+        if hasattr(self, 'lbl_start_cap'):
+            self.lbl_start_cap.configure(text=f"MARKET CAP: {cap}")
 
     def build_game_ui(self):
         # Container principale gioco
@@ -126,7 +165,10 @@ class BitCoSimApp(ctk.CTk):
         
         ctk.CTkLabel(self.market_frame, text="PREZZO ATTUALE", font=("Roboto", 12)).pack(pady=(10,0), padx=10, anchor="w")
         self.lbl_price = ctk.CTkLabel(self.market_frame, text=f"${self.market.current_price:,.2f}", font=("Roboto", 20, "bold"), text_color="#2196F3")
-        self.lbl_price.pack(pady=(0,10), padx=10, anchor="w")
+        self.lbl_price.pack(pady=(0,0), padx=10, anchor="w")
+        
+        self.lbl_pct = ctk.CTkLabel(self.market_frame, text="+0.00%", font=("Roboto", 12, "bold"), text_color="gray")
+        self.lbl_pct.pack(pady=(0,10), padx=10, anchor="w")
 
         # Trading
         ctk.CTkLabel(self.sidebar_frame, text="Trading Rapido", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(20, 5), padx=20, anchor="w")
@@ -179,9 +221,30 @@ class BitCoSimApp(ctk.CTk):
         ctk.CTkLabel(self.pause_menu_content, text="GIOCO IN PAUSA", font=("Roboto", 30, "bold")).pack(pady=30, padx=80)
         ctk.CTkButton(self.pause_menu_content, text="RIPRENDI", command=self.toggle_pause, width=200, height=45).pack(pady=10)
         ctk.CTkButton(self.pause_menu_content, text="IMPOSTAZIONI", command=self.show_settings_in_pause, width=200, height=45).pack(pady=10)
+        ctk.CTkButton(self.pause_menu_content, text="MENU PRINCIPALE", command=self.return_to_main_menu, width=200, height=45, fg_color="transparent", border_width=2, text_color=("gray10", "gray90")).pack(pady=10)
         ctk.CTkButton(self.pause_menu_content, text="SALVA ED ESCI", command=self.on_closing, width=200, height=45, fg_color="transparent", border_width=2, text_color=("gray10", "gray90")).pack(pady=(10, 30))
  
+        # Menu Game Over (overlay nascosto)
+        self.game_over_overlay = ctk.CTkFrame(self.game_container, fg_color=("gray95", "gray10"), corner_radius=20, border_width=2, border_color="#B71C1C")
+        ctk.CTkLabel(self.game_over_overlay, text="BANCAROTTA!", font=("Roboto", 35, "bold"), text_color="#D32F2F").pack(pady=(40, 10), padx=80)
+        ctk.CTkLabel(self.game_over_overlay, text="Hai perso tutto il tuo patrimonio.", font=("Roboto", 16), text_color="gray50").pack(pady=(0, 30))
+        ctk.CTkButton(self.game_over_overlay, text="MENU PRINCIPALE", command=self.return_to_main_menu, width=200, height=45, fg_color="#D32F2F", hover_color="#B71C1C").pack(pady=20)
+ 
         self.game_container.grid_remove() # Nascondi UI gioco
+
+    def show_game_over_screen(self):
+        self.paused = True
+        if self.pause_overlay.winfo_viewable():
+            self.pause_overlay.place_forget()
+        self.game_over_overlay.place(relx=0.5, rely=0.5, anchor="center")
+
+    def return_to_main_menu(self):
+        self.paused = True
+        self.game_running = False
+        self.pause_overlay.place_forget()
+        self.game_over_overlay.place_forget()
+        self.game_container.grid_remove()
+        self.start_frame.grid()
 
     def init_graph(self):
         self.figure = Figure(figsize=(6, 5), dpi=100)
@@ -260,6 +323,13 @@ class BitCoSimApp(ctk.CTk):
 
     # --- Azioni ---
     def start_game(self):
+        # Reset logica di gioco se necessario
+        self.market.reset()
+        self.wallet.reset()
+        self.history.reset()
+        self.bankrupt.reset()
+        self.graph_data = [] # Reset dati grafico visivi
+        
         self.start_frame.grid_remove()
         self.game_container.grid()
         self.game_running = True
@@ -281,10 +351,8 @@ class BitCoSimApp(ctk.CTk):
             if self.wallet.buy_stock(amount, self.market.current_price):
                 self.lbl_msg.configure(text=f"Acquistati {amount} BTC", text_color="#66BB6A")
                 self.update_ui_labels()
-                sys.debug.write(f"[TRADE] BUY {amount} @ ${self.market.current_price:.2f} | Tot: ${cost:.2f}\n")
             else:
                 self.lbl_msg.configure(text="Fondi insufficienti!", text_color="#EF5350")
-                sys.debug.write("[ERROR] BUY fallito: Fondi insufficienti\n")
         except ValueError:
             self.lbl_msg.configure(text="Inserisci un numero valido", text_color="#EF5350")
 
@@ -295,17 +363,36 @@ class BitCoSimApp(ctk.CTk):
             if self.wallet.sell_stock(amount, self.market.current_price):
                 self.lbl_msg.configure(text=f"Venduti {amount} BTC", text_color="#66BB6A")
                 self.update_ui_labels()
-                sys.debug.write(f"[TRADE] SELL {amount} @ ${self.market.current_price:.2f} | Tot: ${gain:.2f}\n")
             else:
                 self.lbl_msg.configure(text="Azioni insufficienti!", text_color="#EF5350")
-                sys.debug.write("[ERROR] SELL fallito: Azioni insufficienti\n")
         except ValueError:
             self.lbl_msg.configure(text="Inserisci un numero valido", text_color="#EF5350")
             
     def update_ui_labels(self):
         self.lbl_balance.configure(text=f"${self.wallet.balance:,.2f}")
-        self.lbl_price.configure(text=f"${self.market.current_price:,.2f}")
+        
+        # Formattazione Prezzo
+        formatted_price = self.format_large_number(self.market.current_price)
+        self.lbl_price.configure(text=f"${formatted_price}")
+        
+        # Percentuale
+        pct_color = "#66BB6A" if self.current_pct_change >= 0 else "#EF5350"
+        sign = "+" if self.current_pct_change >= 0 else ""
+        self.lbl_pct.configure(text=f"{sign}{self.current_pct_change:.2f}%", text_color=pct_color)
+        
         self.lbl_stocks.configure(text=f"Azioni: {self.wallet.stock:.4f}")
+
+    def format_large_number(self, num):
+        if num >= 1_000_000_000_000_000:
+            return f"{num/1_000_000_000_000_000:.2f}Qa"
+        elif num >= 1_000_000_000_000:
+            return f"{num/1_000_000_000_000:.2f}T"
+        elif num >= 1_000_000_000:
+            return f"{num/1_000_000_000:.2f}Mrd"
+        elif num >= 1_000_000:
+            return f"{num/1_000_000:.2f}Mln"
+        else:
+            return f"{num:,.2f}"
 
     def toggle_pause(self, event=None):
         if not self.game_running: return
@@ -317,11 +404,9 @@ class BitCoSimApp(ctk.CTk):
                 self.settings_frame.pack_forget()
 
             self.pause_overlay.place(relx=0.5, rely=0.5, anchor="center")
-            sys.debug.write("[GAME] Stato: PAUSA\n")
         else:
             self.pause_overlay.place_forget()
             self.update_game_loop()
-            sys.debug.write("[GAME] Stato: RIPRESA\n")
 
     def show_settings_in_pause(self):
         # Nascondi menu pausa
@@ -346,15 +431,12 @@ class BitCoSimApp(ctk.CTk):
     
     def auto_save_loop(self):
         if self.game_running and not self.paused:
-            sys.debug.write("[SYSTEM] Auto-Save... ")
             self.save_manager.save_game()
-            sys.debug.write("Completato.\n")
         self.after(600000, self.auto_save_loop)
 
     def on_closing(self):
         if self.game_running:
             self.save_manager.save_game()
-            sys.debug.write("[SYSTEM] Chiusura e salvataggio.\n")
         self.destroy()
 
     # --- Game Loop ---
@@ -363,35 +445,42 @@ class BitCoSimApp(ctk.CTk):
             return
 
         # 1. Update Stato Market e Logica Bancarotta
+        old_price = self.market.current_price
         self.market.update_market()
+        
+        if old_price > 0:
+            self.current_pct_change = ((self.market.current_price - old_price) / old_price) * 100
+        else:
+            self.current_pct_change = 0.0
+            
         self.history.save_history()
         
         # Logica di rischio bancarotta
-        game_over = self.bankrupt.update_risk() 
+        # Logica di rischio bancarotta (passando il tempo trascorso in secondi = tick_interval / 1000)
+        # Nota: tick_interval è in ms
+        delta_seconds = self.tick_interval / 1000.0
+        game_over = self.bankrupt.update_risk(delta_seconds) 
         
         if self.bankrupt.in_danger:
             # Mostra Alert
             if not self.bankrupt_alert_frame.winfo_viewable():
                 self.bankrupt_alert_frame.pack(side="right", padx=20)
-                sys.debug.write("[ALERT] Bancarotta imminente! Timer attivato.\n")
             
             remaining = self.bankrupt.get_time()
             self.lbl_bankrupt_timer.configure(text=f"RISCHIO BANCAROTTA: {remaining}s")
             
             # Se siamo in pericolo e game over -> Fine
+            # Se siamo in pericolo e game over -> Fine
             if game_over:
                 self.lbl_bankrupt_timer.configure(text="BANCAROTTA!")
-                sys.debug.write("[GAME OVER] Bancarotta confermata. Reset.\n")
                 self.update_ui_labels()
+                self.show_game_over_screen()
+                return
         else:
             # Nascondi Alert se non c'è più pericolo
             if self.bankrupt_alert_frame.winfo_viewable():
                 self.bankrupt_alert_frame.pack_forget()
-                sys.debug.write("[ALERT] Percolo rientrato.\n")
 
-        # 2. Log Debug
-        sys.debug.write(f"[MARKET] ${self.market.current_price:.2f} ({self.market.current_state})\n")
-        
         # 3. Grafico Data Update
         self.graph_data.append(self.market.current_price)
         
@@ -400,9 +489,9 @@ class BitCoSimApp(ctk.CTk):
         if is_graph_full:
             self.graph_data.pop(0)
             if self.bankrupt.in_danger:
-                self.tick_interval = 5000 
+                self.tick_interval = 1000 # Mantieni responsivo (1s) anche in pericolo
             else:
-                self.tick_interval = 10000 
+                self.tick_interval = 1000
         else:
             self.tick_interval = 1000 
 

@@ -26,6 +26,15 @@ class Market:
         self.pop_counter = 0
         
         self.generate_steps(10)
+
+    def reset(self):
+        self.current_price = self.start_price
+        self.current_state = "STAGNANT"
+        self.queue = []
+        self.pop_counter = 0
+        self.gen_price = self.start_price
+        self.gen_state = "STAGNANT"
+        self.generate_steps(10)
     
     def get_next_state(self, current_state: str) -> str:
         probabilities = self.matrix[current_state]
@@ -71,6 +80,10 @@ class Wallet:
         self.balance = balance
         self.stock = stock
 
+    def reset(self):
+        self.balance = 10000 # Default start
+        self.stock = 0
+
     def buy_stock(self, amount: float, price: float) -> bool:
         # Acquista una quantità di azioni se i fondi sono sufficienti.
         if self.balance >= amount * price:
@@ -94,34 +107,41 @@ class Bankrupt:
         self.grace_period = grace_period
         self.start_time = None 
         self.in_danger = False
+        self.forced_danger = False
+        self.time_spent_in_danger = 0.0
 
-    def update_risk(self) -> bool:
+    def reset(self):
+        self.forced_danger = False
+        self.in_danger = False
+        self.time_spent_in_danger = 0.0
+
+    def update_risk(self, delta_time: float) -> bool:
         net_worth = self.wallet.balance + (self.wallet.stock * self.market.current_price)
         limit = self.market.start_price * 0.01
         
-        if net_worth <= limit:
-            if not self.in_danger:
-                # Inizia il countdown solo al primo superamento della soglia
-                self.start_time = time.time()
-                self.in_danger = True
+        if net_worth <= limit or self.forced_danger:
+            self.in_danger = True
             
-            elapsed = time.time() - self.start_time
-            if elapsed >= self.grace_period:
+            # Incrementa il tempo passato in pericolo usando il delta time (solo quando il gioco corre)
+            self.time_spent_in_danger += delta_time
+            
+            if self.time_spent_in_danger >= self.grace_period:
                 # BANCAROTTA DEFINITIVA: Tempo scaduto
                 self.wallet.balance = 0
                 self.wallet.stock = 0
                 self.market.current_price = 0   
+                self.forced_danger = False # Reset flag
                 return True
         else:
             self.in_danger = False
-            self.start_time = None
+            self.time_spent_in_danger = 0.0 # Reset timer se si recupera
             
         return False
 
     def get_time(self) -> int:
         if not self.in_danger:
             return self.grace_period
-        return max(0, int(self.grace_period - (time.time() - self.start_time)))
+        return max(0, int(self.grace_period - self.time_spent_in_danger))
 
 
 class History:
@@ -129,6 +149,9 @@ class History:
     def __init__(self, wallet: Wallet, market: Market) -> None: 
         self.wallet = wallet
         self.market = market
+        self.history = []
+
+    def reset(self):
         self.history = []
     
     def save_history(self) -> None:
