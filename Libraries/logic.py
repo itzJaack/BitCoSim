@@ -86,7 +86,6 @@ class Wallet:
             return True
         return False
 
-
 class Bankrupt:
     def __init__(self, wallet: Wallet, market: Market, grace_period: int = 30) -> None:
         self.wallet = wallet
