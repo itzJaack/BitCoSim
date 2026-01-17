@@ -8,6 +8,7 @@ class Market:
     Include un buffer per generare passi futuri in batch.
     """
     def __init__(self, start_price: float = 40000) -> None: 
+        self.start_price = start_price
         self.current_price = start_price
         self.states = ["BEAR", "BULL", "STAGNANT"]
         self.current_state = "STAGNANT"
@@ -62,7 +63,7 @@ class Market:
 
         self.pop_counter += 1
         if self.pop_counter % 5 == 0:
-            self.generate_steps(10)
+            self.generate_steps(5)
 
 class Wallet:
     # Rappresenta il portafoglio dell'utente contenente liquidità e azioni.

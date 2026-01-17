@@ -1,5 +1,5 @@
 import json, time, os
-from logic import Market, Wallet, Bankrupt, History
+from Libraries.logic import Market, Wallet, Bankrupt, History
 
 
 class SaveManager:
