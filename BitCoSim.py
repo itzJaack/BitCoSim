@@ -173,14 +173,32 @@ class BitCoSimApp(ctk.CTk):
         # Trading
         ctk.CTkLabel(self.sidebar_frame, text="Trading Rapido", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(20, 5), padx=20, anchor="w")
 
-        self.entry_amount = ctk.CTkEntry(self.sidebar_frame, placeholder_text="Quantità")
-        self.entry_amount.pack(fill="x", padx=15, pady=5)
+        self.entry_container = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        self.entry_container.pack(fill="x", padx=15, pady=5)
+        
+        self.entry_amount = ctk.CTkEntry(self.entry_container, placeholder_text="Quantità", height=35)
+        self.entry_amount.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        
+        self.btn_max = ctk.CTkButton(self.entry_container, text="MAX", width=45, height=35, 
+                                     fg_color=("gray75", "#333333"), 
+                                     hover_color=("gray70", "#444444"),
+                                     text_color=("black", "white"),
+                                     font=("Roboto", 10, "bold"), command=self.set_max_amount)
+        self.btn_max.pack(side="right")
 
-        self.btn_buy = ctk.CTkButton(self.sidebar_frame, text="ACQUISTA", fg_color="#2E7D32", hover_color="#1B5E20", command=self.buy_action)
-        self.btn_buy.pack(fill="x", padx=15, pady=5)
+        self.btn_buy = ctk.CTkButton(self.sidebar_frame, text="ACQUISTA", 
+                                     fg_color=("white", "black"), text_color=("black", "white"),
+                                     border_color="#2E7D32", border_width=2,
+                                     hover_color=("#F2F2F2", "#1B5E20"), font=("Roboto", 14, "bold"), 
+                                     height=40, command=self.buy_action)
+        self.btn_buy.pack(fill="x", padx=15, pady=8)
 
-        self.btn_sell = ctk.CTkButton(self.sidebar_frame, text="VENDI", fg_color="#C62828", hover_color="#B71C1C", command=self.sell_action)
-        self.btn_sell.pack(fill="x", padx=15, pady=5)
+        self.btn_sell = ctk.CTkButton(self.sidebar_frame, text="VENDI", 
+                                      fg_color=("white", "black"), text_color=("black", "white"),
+                                      border_color="#C62828", border_width=2,
+                                      hover_color=("#F2F2F2", "#B71C1C"), font=("Roboto", 14, "bold"), 
+                                      height=40, command=self.sell_action)
+        self.btn_sell.pack(fill="x", padx=15, pady=8)
         
         self.lbl_msg = ctk.CTkLabel(self.sidebar_frame, text="", text_color=("orange", "yellow"), font=("Roboto", 11))
         self.lbl_msg.pack(pady=5)
@@ -308,6 +326,9 @@ class BitCoSimApp(ctk.CTk):
         self.ax.plot(self.graph_data, color=line_color, marker='o', markersize=3, linewidth=2)
         self.ax.fill_between(range(len(self.graph_data)), self.graph_data, alpha=0.1, color=line_color)
         
+        self.ax.set_xlim(0, self.max_data_points - 1)
+        self.ax.margins(x=0)
+        
         self.ax.set_title(f'Andamento Prezzo ({self.market.current_state})', color=title_color, pad=20)
         self.ax.grid(True, color=grid_color, linestyle='--')
         
@@ -349,7 +370,7 @@ class BitCoSimApp(ctk.CTk):
             amount = float(self.entry_amount.get())
             cost = amount * self.market.current_price
             if self.wallet.buy_stock(amount, self.market.current_price):
-                self.lbl_msg.configure(text=f"Acquistati {amount} BTC", text_color="#66BB6A")
+                self.lbl_msg.configure(text=f"Acquistati {amount} BTC", text_color="#2E7D32")
                 self.update_ui_labels()
             else:
                 self.lbl_msg.configure(text="Fondi insufficienti!", text_color="#EF5350")
@@ -361,12 +382,16 @@ class BitCoSimApp(ctk.CTk):
             amount = float(self.entry_amount.get())
             gain = amount * self.market.current_price
             if self.wallet.sell_stock(amount, self.market.current_price):
-                self.lbl_msg.configure(text=f"Venduti {amount} BTC", text_color="#66BB6A")
+                self.lbl_msg.configure(text=f"Venduti {amount} BTC", text_color="#C62828")
                 self.update_ui_labels()
             else:
                 self.lbl_msg.configure(text="Azioni insufficienti!", text_color="#EF5350")
         except ValueError:
             self.lbl_msg.configure(text="Inserisci un numero valido", text_color="#EF5350")
+
+    def set_max_amount(self):
+        self.entry_amount.delete(0, tk.END)
+        self.entry_amount.insert(0, f"{self.wallet.stock:.8f}")
             
     def update_ui_labels(self):
         self.lbl_balance.configure(text=f"${self.wallet.balance:,.2f}")
