@@ -47,6 +47,8 @@ class DebugInterface(ctk.CTkToplevel):
         
         self.protocol("WM_DELETE_WINDOW", self.hide)
         
+        self.bind("<F7>", self.toggle)
+        
         self.create_widgets()
 
     def center_window(self):
@@ -144,10 +146,12 @@ class DebugInterface(ctk.CTkToplevel):
         sys.debug.write("[VIEW] Interfaccia sincronizzata con il gioco.\n")
 
     def toggle(self, event=None):
-        if self.state() == "withdraw" or self.state() == "iconic" or not self.winfo_viewable():
+        # Su Windows lo stato è 'withdrawn' quando nascosta
+        if self.state() == "withdrawn" or self.state() == "iconic":
             self.center_window()
             self.deiconify()
             self.lift()
+            self.focus_force() 
             self.refresh_view()
         else:
             self.withdraw()

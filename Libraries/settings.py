@@ -1,10 +1,12 @@
 import customtkinter as ctk
 
-
+    
 class SettingsFrame(ctk.CTkFrame):
-    def __init__(self, master, close_callback=None):
+    def __init__(self, master, close_callback=None, initial_appearance="Sistema", initial_scaling="100%"):
         super().__init__(master, fg_color="transparent")
         self.close_callback = close_callback
+        self.initial_appearance = initial_appearance
+        self.initial_scaling = initial_scaling
         
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -43,7 +45,7 @@ class SettingsFrame(ctk.CTkFrame):
         row1.pack(fill="x", padx=10, pady=5)
         ctk.CTkLabel(row1, text="Tema Applicazione:", font=("Roboto", 14)).pack(side="left", padx=5)
         self.option_appearance = ctk.CTkOptionMenu(row1, values=["Sistema", "Chiaro", "Scuro"], command=self.change_appearance_mode)
-        self.option_appearance.set("Sistema")
+        self.option_appearance.set(self.initial_appearance)
         self.option_appearance.pack(side="right", padx=5)
         
         # Scaling
@@ -56,7 +58,7 @@ class SettingsFrame(ctk.CTkFrame):
         row2.pack(fill="x", padx=10, pady=5)
         ctk.CTkLabel(row2, text="Zoom Interfaccia:", font=("Roboto", 14)).pack(side="left", padx=5)
         self.option_scaling = ctk.CTkOptionMenu(row2, values=["80%", "90%", "100%", "110%", "120%"], command=self.change_scaling_event)
-        self.option_scaling.set("100%")
+        self.option_scaling.set(self.initial_scaling)
         self.option_scaling.pack(side="right", padx=5)
 
     def setup_about_tab(self):

@@ -76,12 +76,12 @@ class Market:
 
 class Wallet:
     # Rappresenta il portafoglio dell'utente contenente liquidità e azioni.
-    def __init__(self, balance: float = 0, stock: float = 0) -> None:
+    def __init__(self, balance: float = 125000, stock: float = 0) -> None:
         self.balance = balance
         self.stock = stock
 
     def reset(self):
-        self.balance = 10000 # Default start
+        self.balance = 125000 # Default start
         self.stock = 0
 
     def buy_stock(self, amount: float, price: float) -> bool:

@@ -18,6 +18,7 @@ from Libraries.logic import Market, Wallet, History, Bankrupt
 from Libraries.settings import SettingsFrame
 from Libraries.debug import DebugInterface
 from Data.save_manager import SaveManager
+from Data.settings_manager import SettingsManager
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -26,11 +27,17 @@ class BitCoSimApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # --- Configurazione Finestra ---
         self.title("BitCoSim - Cryptocurrency Simulator")
-        self.geometry("1100x700")
-        self.after(200, lambda: self.state("zoomed"))
         
+        # Centra la finestra sullo schermo
+        width = 1100
+        height = 750
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+
         # Gestione chiusura window
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -41,17 +48,22 @@ class BitCoSimApp(ctk.CTk):
 
         # --- Logica del Gioco ---
         self.market = Market()
-        self.wallet = Wallet(balance=10000)
+        self.wallet = Wallet(balance=125000)
         self.history = History(self.wallet, self.market)
         self.bankrupt = Bankrupt(self.wallet, self.market)
         self.save_manager = SaveManager(self.market, self.wallet, self.bankrupt, self.history)
+        self.settings_manager = SettingsManager()
         
         self.current_pct_change = 0.0
+        self.current_scaling_str = "100%"
+
+        # Applica settings salvati
+        self.apply_settings()
 
         # --- Dati per il Grafico ---
         self.graph_data = [] 
         self.max_data_points = 30 
-        self.tick_interval = 1000 # Inizio veloce (1s)
+        self.tick_interval = 1000
 
         # --- Layout Grigilia (Globale) ---
         self.grid_columnconfigure(0, weight=1)
@@ -119,11 +131,22 @@ class BitCoSimApp(ctk.CTk):
                 
             # Update UI in main thread safely (using after usually preferred but ctk often handles this, 
             # for safety we can use after or direct config if simple)
+            # Update UI in main thread safely
             self.after(0, lambda: self.update_start_labels(price, cap_formatted))
+            
+            # Se siamo nel menu, aggiorna il prezzo di partenza del mercato
+            if not self.game_running:
+                self.market.start_price = price
+                self.market.current_price = price
+                self.market.gen_price = price
             
         except Exception as e:
             sys.debug.write(f"[NETWORK] Errore fetch dati: {e}\n")
-            self.after(0, lambda: self.update_start_labels(42500, "$850B")) # Fallback
+            self.after(0, lambda: self.update_start_labels(42_500, "$850B")) # Fallback
+            if not self.game_running:
+                self.market.start_price = 42_500
+                self.market.current_price = 42_500
+                self.market.gen_price = 42_500
 
     def update_start_labels(self, price, cap):
         if hasattr(self, 'lbl_start_price'):
@@ -153,10 +176,11 @@ class BitCoSimApp(ctk.CTk):
         self.info_frame.pack(fill="x", padx=10, pady=10)
         
         ctk.CTkLabel(self.info_frame, text="PORTAFOGLIO", font=("Roboto", 12)).pack(pady=(10,0), padx=10, anchor="w")
-        self.lbl_balance = ctk.CTkLabel(self.info_frame, text=f"${self.wallet.balance:,.2f}", font=("Roboto", 20, "bold"), text_color="#4CAF50")
+        initial_balance = self.format_large_number(self.wallet.balance)
+        self.lbl_balance = ctk.CTkLabel(self.info_frame, text=f"${initial_balance}", font=("Roboto", 20, "bold"), text_color="#4CAF50")
         self.lbl_balance.pack(pady=(0,5), padx=10, anchor="w")
         
-        self.lbl_stocks = ctk.CTkLabel(self.info_frame, text=f"Azioni: {self.wallet.stock:.4f}", font=("Roboto", 13))
+        self.lbl_stocks = ctk.CTkLabel(self.info_frame, text=f"Azioni: {self.wallet.stock:.2f}", font=("Roboto", 13))
         self.lbl_stocks.pack(pady=(0,10), padx=10, anchor="w")
 
         # Sezione Mercato (Sidebar)
@@ -173,28 +197,35 @@ class BitCoSimApp(ctk.CTk):
         # Trading
         ctk.CTkLabel(self.sidebar_frame, text="Trading Rapido", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(20, 5), padx=20, anchor="w")
 
-        self.entry_container = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
-        self.entry_container.pack(fill="x", padx=15, pady=5)
+        self.entry_amount = ctk.CTkEntry(self.sidebar_frame, placeholder_text="Quantità", height=35)
+        self.entry_amount.pack(fill="x", padx=15, pady=(5, 5))
+
+        self.max_btn_container = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        self.max_btn_container.pack(fill="x", padx=15, pady=0)
         
-        self.entry_amount = ctk.CTkEntry(self.entry_container, placeholder_text="Quantità", height=35)
-        self.entry_amount.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        
-        self.btn_max = ctk.CTkButton(self.entry_container, text="MAX", width=45, height=35, 
+        self.btn_max_sell = ctk.CTkButton(self.max_btn_container, text="Max Sell", height=30, 
                                      fg_color=("gray75", "#333333"), 
                                      hover_color=("gray70", "#444444"),
                                      text_color=("black", "white"),
-                                     font=("Roboto", 10, "bold"), command=self.set_max_amount)
-        self.btn_max.pack(side="right")
+                                     font=("Roboto", 10, "bold"), command=self.set_max_sell_amount)
+        self.btn_max_sell.pack(side="left", fill="x", expand=True, padx=(0, 2))
+
+        self.btn_max_buy = ctk.CTkButton(self.max_btn_container, text="Max Buy", height=30, 
+                                     fg_color=("gray75", "#333333"), 
+                                     hover_color=("gray70", "#444444"),
+                                     text_color=("black", "white"),
+                                     font=("Roboto", 10, "bold"), command=self.set_max_buy_amount)
+        self.btn_max_buy.pack(side="right", fill="x", expand=True, padx=(2, 0))
 
         self.btn_buy = ctk.CTkButton(self.sidebar_frame, text="ACQUISTA", 
-                                     fg_color=("white", "black"), text_color=("black", "white"),
+                                     fg_color=("gray85", "#2b2b2b"), text_color=("black", "white"),
                                      border_color="#2E7D32", border_width=2,
                                      hover_color=("#F2F2F2", "#1B5E20"), font=("Roboto", 14, "bold"), 
                                      height=40, command=self.buy_action)
         self.btn_buy.pack(fill="x", padx=15, pady=8)
 
         self.btn_sell = ctk.CTkButton(self.sidebar_frame, text="VENDI", 
-                                      fg_color=("white", "black"), text_color=("black", "white"),
+                                      fg_color=("gray85", "#2b2b2b"), text_color=("black", "white"),
                                       border_color="#C62828", border_width=2,
                                       hover_color=("#F2F2F2", "#B71C1C"), font=("Roboto", 14, "bold"), 
                                       height=40, command=self.sell_action)
@@ -343,31 +374,43 @@ class BitCoSimApp(ctk.CTk):
         self.canvas.draw()
 
     # --- Azioni ---
-    def start_game(self):
-        # Reset logica di gioco se necessario
-        self.market.reset()
-        self.wallet.reset()
-        self.history.reset()
-        self.bankrupt.reset()
-        self.graph_data = [] # Reset dati grafico visivi
+    def start_game(self, reset_state=True):
+        if reset_state:
+            # Reset logica di gioco se necessario
+            self.market.reset()
+            self.wallet.reset()
+            self.history.reset()
+            self.bankrupt.reset()
+            self.graph_data = [] # Reset dati grafico visivi
         
         self.start_frame.grid_remove()
         self.game_container.grid()
         self.game_running = True
+        self.paused = False
         
         # Force redraw once visible
         self.update_graph() 
         self.update_game_loop()
 
     def load_and_start(self):
-        self.save_manager.load_game()
-        if self.history.history:
-            self.graph_data = [h[2] for h in self.history.history[-self.max_data_points:]]
-        self.start_game()
+        if self.save_manager.load_game():
+            if self.history.history:
+                self.graph_data = [h[2] for h in self.history.history[-self.max_data_points:]]
+            self.start_game(reset_state=False)
+        else:
+            # Opzionale: mostra un messaggio se non c'è salvataggio
+            pass
 
     def buy_action(self):
         try:
-            amount = float(self.entry_amount.get())
+            amount_str = self.entry_amount.get().replace(',', '.')
+            amount = float(amount_str)
+            
+            # Controllo multipli di 0.25 (usando arrotondamento per sicurezza floating point)
+            if not (round(amount / 0.25, 8)).is_integer():
+                self.lbl_msg.configure(text="Solo multipli di 0.25!", text_color="#EF5350")
+                return
+
             cost = amount * self.market.current_price
             if self.wallet.buy_stock(amount, self.market.current_price):
                 self.lbl_msg.configure(text=f"Acquistati {amount} BTC", text_color="#2E7D32")
@@ -379,7 +422,8 @@ class BitCoSimApp(ctk.CTk):
 
     def sell_action(self):
         try:
-            amount = float(self.entry_amount.get())
+            amount_str = self.entry_amount.get().replace(',', '.')
+            amount = float(amount_str)
             gain = amount * self.market.current_price
             if self.wallet.sell_stock(amount, self.market.current_price):
                 self.lbl_msg.configure(text=f"Venduti {amount} BTC", text_color="#C62828")
@@ -389,12 +433,27 @@ class BitCoSimApp(ctk.CTk):
         except ValueError:
             self.lbl_msg.configure(text="Inserisci un numero valido", text_color="#EF5350")
 
-    def set_max_amount(self):
+    def set_max_sell_amount(self):
         self.entry_amount.delete(0, tk.END)
-        self.entry_amount.insert(0, f"{self.wallet.stock:.8f}")
+        # Anche per la vendita, potremmo voler suggerire il massimo arrotondato ai 0.25 
+        # se l'utente ha frazioni strane, ma per ora mettiamo tutto quello che ha.
+        self.entry_amount.insert(0, f"{self.wallet.stock:.2f}")
+
+    def set_max_buy_amount(self):
+        if self.market.current_price <= 0: return
+        
+        # Massimo acquistabile basato sul saldo
+        max_possible = self.wallet.balance / self.market.current_price
+        
+        # Arrotonda per difetto al multiplo di 0.25 più vicino
+        max_rounded = (max_possible // 0.25) * 0.25
+        
+        self.entry_amount.delete(0, tk.END)
+        self.entry_amount.insert(0, f"{max_rounded:.2f}")
             
     def update_ui_labels(self):
-        self.lbl_balance.configure(text=f"${self.wallet.balance:,.2f}")
+        formatted_balance = self.format_large_number(self.wallet.balance)
+        self.lbl_balance.configure(text=f"${formatted_balance}")
         
         # Formattazione Prezzo
         formatted_price = self.format_large_number(self.market.current_price)
@@ -405,7 +464,7 @@ class BitCoSimApp(ctk.CTk):
         sign = "+" if self.current_pct_change >= 0 else ""
         self.lbl_pct.configure(text=f"{sign}{self.current_pct_change:.2f}%", text_color=pct_color)
         
-        self.lbl_stocks.configure(text=f"Azioni: {self.wallet.stock:.4f}")
+        self.lbl_stocks.configure(text=f"Azioni: {self.wallet.stock:.2f}")
 
     def format_large_number(self, num):
         if num >= 1_000_000_000_000_000:
@@ -439,7 +498,19 @@ class BitCoSimApp(ctk.CTk):
         
         # Mostra frame settings (crealo se non esiste)
         if not hasattr(self, "settings_frame"):
-            self.settings_frame = SettingsFrame(self.pause_overlay, close_callback=self.hide_settings_in_pause)
+            app_mode = ctk.get_appearance_mode()
+            # Mappa inversa per ctk -> UI menu
+            rev_map = {"System": "Sistema", "Light": "Chiaro", "Dark": "Scuro"}
+            
+            # Per lo scaling, usiamo il valore salvato nell'app
+            scale_val = self.current_scaling_str
+            
+            self.settings_frame = SettingsFrame(
+                self.pause_overlay, 
+                close_callback=self.hide_settings_in_pause,
+                initial_appearance=rev_map.get(app_mode, "Sistema"),
+                initial_scaling=scale_val
+            )
         
         self.settings_frame.pack(expand=True, fill="both", padx=10, pady=10)
 
@@ -459,9 +530,37 @@ class BitCoSimApp(ctk.CTk):
             self.save_manager.save_game()
         self.after(600000, self.auto_save_loop)
 
+    def apply_settings(self):
+        data = self.settings_manager.load_settings()
+        if data:
+            if "appearance_mode" in data:
+                mode_map = {"Sistema": "System", "Chiaro": "Light", "Scuro": "Dark", "System": "System", "Light": "Light", "Dark": "Dark"}
+                mode = data["appearance_mode"]
+                ctk.set_appearance_mode(mode_map.get(mode, "System"))
+            if "ui_scaling" in data:
+                scaling = data["ui_scaling"]
+                self.current_scaling_str = scaling if isinstance(scaling, str) else f"{int(scaling*100)}%"
+                
+                if isinstance(scaling, str):
+                    scaling_float = int(scaling.replace("%", "")) / 100
+                else:
+                    scaling_float = scaling
+                ctk.set_widget_scaling(scaling_float)
+
     def on_closing(self):
         if self.game_running:
             self.save_manager.save_game()
+        
+        # Salva impostazioni correnti
+        # Se il frame settings esiste, prendi i valori da lì, altrimenti usa i globali
+        curr_appearance = ctk.get_appearance_mode()
+        # Usa il valore tracciato se il frame non esiste
+        curr_scaling = self.current_scaling_str
+        if hasattr(self, "settings_frame"):
+            curr_appearance = self.settings_frame.option_appearance.get()
+            curr_scaling = self.settings_frame.option_scaling.get()
+        
+        self.settings_manager.save_settings(curr_appearance, curr_scaling)
         self.destroy()
 
     # --- Game Loop ---
@@ -528,5 +627,5 @@ class BitCoSimApp(ctk.CTk):
         self.after(self.tick_interval, self.update_game_loop)
 
 if __name__ == "__main__":
-    app = BitCoSimApp()
-    app.mainloop()
+    app = BitCoSimApp()                                                                                           
+    app.mainloop()                                                                               

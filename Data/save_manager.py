@@ -79,7 +79,7 @@ class SaveManager:
         except Exception as e:
             print(f"Errore durante il salvataggio: {e}")
     
-    def load_game(self) -> None:
+    def load_game(self) -> bool:
         """
         Carica i dati della partita dal file .json più recente nella cartella Saves.
         """
@@ -103,7 +103,7 @@ class SaveManager:
         
         if newest_file is None:
             print("Nessun salvataggio valido trovato.")
-            return
+            return False
 
         full_path = os.path.join(self.save_dir, newest_file)
         print(f"Caricamento partita da {full_path}...")
@@ -127,6 +127,8 @@ class SaveManager:
             
             self.history.history = data["history"]
             print("Partita caricata con successo.")
+            return True
 
         except Exception as e:
             print(f"Errore durante il caricamento: {e}")
+            return False

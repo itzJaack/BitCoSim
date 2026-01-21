@@ -1,10 +1,7 @@
 import json, time, os
-from Libraries.settings import SettingsWindow
 
 class SettingsManager:
-    def __init__(self, settings_window: SettingsWindow) -> None:
-        self.settings_window = settings_window
-        
+    def __init__(self) -> None:
         # Cartella Saves (condivisa con save_manager)
         self.save_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "Saves"))
         if not os.path.exists(self.save_dir):
@@ -12,13 +9,13 @@ class SettingsManager:
             
         self.settings_file = os.path.join(self.save_dir, "settings.json")
 
-    def save_settings(self) -> None:
+    def save_settings(self, appearance_mode, ui_scaling) -> None:
         """
         Salva le impostazioni correnti (Appearance, UI Scaling) su file JSON.
         """
         data = {
-            "appearance_mode": self.settings_window.option_appearance.get(),
-            "ui_scaling": self.settings_window.option_scaling.get(),
+            "appearance_mode": appearance_mode,
+            "ui_scaling": ui_scaling,
             "SAVED": time.time()
         }
         
@@ -29,32 +26,20 @@ class SettingsManager:
         except Exception as e:
             print(f"Errore durante il salvataggio delle impostazioni: {e}")
 
-    def load_settings(self) -> None:
+    def load_settings(self) -> dict:
         """
-        Carica le impostazioni da file JSON e le applica alla finestra delle impostazioni.
+        Carica le impostazioni da file JSON e le restituisce.
         """
         if not os.path.exists(self.settings_file):
             print("Nessun file impostazioni trovato.")
-            return
+            return None
 
         print(f"Caricamento impostazioni da {self.settings_file}...")
         try:
             with open(self.settings_file, "r") as f:
                 data = json.load(f)
-            
-            # Applica Modalità Aspetto
-            if "appearance_mode" in data:
-                mode = data["appearance_mode"]
-                self.settings_window.option_appearance.set(mode)
-                self.settings_window.change_appearance_mode(mode)
-            
-            # Applica Scaling UI
-            if "ui_scaling" in data:
-                scaling = data["ui_scaling"]
-                self.settings_window.option_scaling.set(scaling)
-                self.settings_window.change_scaling_event(scaling)
-            
             print("Impostazioni caricate con successo.")
-
+            return data
         except Exception as e:
             print(f"Errore durante il caricamento delle impostazioni: {e}")
+            return None
