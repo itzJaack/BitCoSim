@@ -35,6 +35,13 @@ class Market:
         self.gen_price = self.start_price
         self.gen_state = "STAGNANT"
         self.generate_steps(10)
+
+    def set_custom_price(self, price: float):
+        """Forza un nuovo prezzo e resetta la generazione futura da questo punto."""
+        self.current_price = price
+        self.gen_price = price
+        self.queue = [] # Svuota la coda per rigenerare dal nuovo prezzo
+        self.pop_counter = 0
     
     def get_next_state(self, current_state: str) -> str:
         probabilities = self.matrix[current_state]

@@ -126,7 +126,7 @@ class DebugInterface(ctk.CTkToplevel):
             new_price = float(self.entry_price.get())
             
             self.wallet.balance = new_balance
-            self.market.current_price = new_price
+            self.market.set_custom_price(new_price)
             
             sys.debug.write(f"[EDIT] Dati aggiornati forzatamente: Saldo=${new_balance}, Prezzo=${new_price}\n")
         except ValueError:
